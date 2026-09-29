@@ -1,4 +1,3 @@
-# app.py
 import os
 import requests
 from flask import Flask, request, jsonify, send_from_directory
@@ -46,7 +45,6 @@ def _extract_response_text(data: dict) -> str:
             for c in content:
                 if not isinstance(c, dict):
                     continue
-                # Common shapes: {"type":"output_text","text":"..."} or {"text":"..."}
                 if isinstance(c.get("text"), str):
                     chunks.append(c["text"])
         text = "\n".join(chunks).strip()
@@ -61,38 +59,58 @@ def generate_sat_question(section: str, topic: str, difficulty: str) -> str:
     if not api_key:
         raise RuntimeError("Missing OPENAI_API_KEY")
 
+    # Dynamic rules based on the test section
+    section_rules = ""
+    if "math" in section.lower():
+        section_rules = """
+- Include realistic contexts (word problems) or clean algebraic expressions typical of the digital SAT.
+- Ensure all math notation uses LaTeX ($...$ for inline, $$...$$ for standalone).
+- Make sure incorrect answer choices (distractors) stem from common student errors (e.g., sign errors, forgetting to multiply, misapplying formulas).
+"""
+    else:
+        section_rules = """
+- Include a short, self-contained, college-level reading passage (25–75 words) appropriate for the digital SAT format.
+- Ensure the question directly targets the passage based on standard Digital SAT task types (e.g., Words in Context, Command of Evidence, Central Ideas, Inferences, Expression of Ideas).
+- Distractors must be plausible, subtle, and based on common reading misinterpretations rather than obviously wrong choices.
+"""
+
     prompt = f"""
-You are an SAT test writer. Create ONE original SAT-style question.
+You are an expert College Board SAT item writer specializing in the Digital SAT format. 
+Generate ONE high-quality, authentic SAT question based on the specification below.
 
 Section: {section}
 Topic: {topic}
 Difficulty: {difficulty}
 
-STRICT REQUIREMENTS:
-- SAT style and tone
-- Exactly 4 answer choices labeled A., B., C., D.
-- ALL math must be written in LaTeX
-- Use $...$ for inline math and $$...$$ for displayed equations
-- Do NOT use HTML
-- Do NOT explain LaTeX formatting
-- Do not include any extra headings or text outside the specified format
+CONTENT REQUIREMENTS:
+{section_rules}
+- Difficulty scaling:
+  * Easy: Straightforward application of standard formulas or direct passage evidence.
+  * Medium: Multi-step reasoning or moderate context complexity.
+  * Hard: Complex multi-step reasoning, subtle distractors, or higher-level abstractions.
 
-Output format (plain text only):
+STRICT FORMATTING REQUIREMENTS:
+- Use standard SAT tone and formatting.
+- Exactly 4 answer choices labeled A., B., C., D.
+- Do NOT use HTML tags.
+- Do NOT include markdown code blocks or extra metadata text.
+
+Output format (plain text strictly following this template):
 
 Question:
-<question text>
+<Passage, prompt, or math stem here>
 
 Answer Choices:
-A. ...
-B. ...
-C. ...
-D. ...
+A. <Option A>
+B. <Option B>
+C. <Option C>
+D. <Option D>
 
 Correct Answer:
-<single letter A–D>
+<Single letter: A, B, C, or D>
 
 Explanation:
-<step-by-step explanation with LaTeX>
+<Step-by-step breakdown explaining why the correct answer is right and why key distractors are incorrect>
 """.strip()
 
     headers = {
@@ -103,8 +121,8 @@ Explanation:
     payload = {
         "model": "gpt-4.1-mini",
         "input": prompt,
-        "max_output_tokens": 500,
-        "temperature": 0.4,
+        "max_output_tokens": 800,  # Increased token limit to allow for passages and detailed explanations
+        "temperature": 0.5,        # Slightly raised temperature for better variety in question contexts
     }
 
     r = requests.post(
@@ -152,7 +170,6 @@ def index():
 
 @app.get("/<path:path>")
 def static_proxy(path):
-    # optional: serve any other static files you add later
     return send_from_directory("static", path)
 
 
